@@ -275,12 +275,17 @@ class SteamService(BaseService):
         try:
             games: Dict[str, Dict[str, object]] = {}
             for root in self._steam_library_roots():
-                for manifest in (root / "steamapps").glob("appmanifest_*.acf"):
+                try:
+                    manifests = list((root / "steamapps").glob("appmanifest_*.acf"))
+                except OSError:
+                    continue
+                for manifest in manifests:
                     match = re.fullmatch(r"appmanifest_(\d+)\.acf", manifest.name)
                     if not match:
                         continue
                     try:
-                        content = manifest.read_text(encoding="utf-8")
+                        # A single non-UTF-8 manifest (common on SD cards) must not hide every game.
+                        content = manifest.read_text(encoding="utf-8", errors="replace")
                     except OSError:
                         continue
                     appid = match.group(1)

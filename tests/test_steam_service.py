@@ -74,3 +74,40 @@ class SteamShortcutTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SteamInstalledGamesTests(unittest.TestCase):
+    def test_non_utf8_manifest_on_secondary_library_does_not_hide_games(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tempdir:
+            home = Path(tempdir) / "home"
+            steam = home / ".local/share/Steam"
+            sdcard = Path(tempdir) / "sdcard"
+            (steam / "steamapps").mkdir(parents=True)
+            (sdcard / "steamapps").mkdir(parents=True)
+            (steam / "steamapps/libraryfolders.vdf").write_text(
+                '"libraryfolders"\n{\n'
+                f'\t"0"\n\t{{\n\t\t"path"\t\t"{steam}"\n\t}}\n'
+                f'\t"1"\n\t{{\n\t\t"path"\t\t"{sdcard}"\n\t}}\n'
+                "}\n"
+            )
+            (steam / "steamapps/appmanifest_100.acf").write_text(
+                '"AppState"\n{\n\t"appid"\t\t"100"\n\t"name"\t\t"Internal Game"\n}\n'
+            )
+            (sdcard / "steamapps/appmanifest_200.acf").write_text(
+                '"AppState"\n{\n\t"appid"\t\t"200"\n\t"name"\t\t"SD Game"\n}\n'
+            )
+            (sdcard / "steamapps/appmanifest_300.acf").write_bytes(
+                b'"AppState"\n{\n\t"appid"\t\t"300"\n\t"name"\t\t"Caf\xe9 Game"\n}\n'
+            )
+
+            service = SteamService()
+            service.user_home = home
+            result = service.get_installed_games()
+
+        self.assertTrue(result["success"])
+        self.assertEqual(
+            sorted(game["appid"] for game in result["games"]),
+            ["100", "200", "300"],
+        )
